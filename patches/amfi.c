@@ -201,7 +201,6 @@ bool patch_developer_mode(struct pf_patch_t *patch, uint32_t *stream) {
     {
         if(enable_developer_mode)
         {
-            printf("%s: Found enable twice\n", __FUNCTION__);
             return false;
         }
         enable_developer_mode = pf_follow_branch(amfi_rbuf, stream + 3);
@@ -211,7 +210,6 @@ bool patch_developer_mode(struct pf_patch_t *patch, uint32_t *stream) {
     {
         if(disable_developer_mode)
         {
-            printf("%s: Found disable twice\n", __FUNCTION__);
             return false;
         }
         disable_developer_mode = pf_follow_branch(amfi_rbuf, stream + 3);

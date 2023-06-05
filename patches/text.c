@@ -146,6 +146,7 @@ bool patch_vm_map_protect(uint32_t *stream) {
     uint32_t *tbz = pf_find_next(stream, 8, 0x36480000, 0xfef80010); // tb[n]z w{0-15}, 0x...
     if(!tbz) {
         printf("%s: failed to find tb[n]z\n", __FUNCTION__);
+        return false;
     }
 
     uint32_t op = *tbz;
@@ -165,6 +166,13 @@ bool patch_vm_prot_branch(struct pf_patch_t *patch, uint32_t *stream) {
     stream[2] = 0x14000000 | (uint32_t) off;
 
     return patch_vm_map_protect(stream + 2 + off); // uint32 takes care of << 2
+}
+
+bool patch_vm_prot17(struct pf_patch_t *patch, uint32_t *stream) {
+    int32_t off = pf_signextend_32(stream[1] >> 5, 19);
+    stream[1] = 0x14000000 | (uint32_t) off;
+
+    return patch_vm_map_protect(stream + 1 + off); // uint32 takes care of << 2
 }
 
 bool patch_vm_prot_inline(struct pf_patch_t *patch, uint32_t *stream) {
@@ -855,6 +863,19 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
 
     struct pf_patch_t vm_prot_new = pf_construct_patch(vm_prot_matches_new, vm_prot_masks_new, sizeof(vm_prot_matches_new) / sizeof(uint32_t), (void *) patch_vm_prot_branch);
 
+    uint32_t vm_prot_matches17[] = {
+        0x6a30001f, // bics wzr, w{0-15}, w{16-31}
+        0x54000001, // b.ne 0x...
+        0x37a80000  // tbnz w{0-15}, {0x15 | 0x17}, 0x...
+    };
+    uint32_t vm_prot_masks17[] = {
+        0xfff00e1f,
+        0x54000001, // b.ne 0x...
+        0x37a80000  // tbnz w{0-15}, {0x15 | 0x17}, 0x...
+    };
+
+    struct pf_patch_t vm_prot17 = pf_construct_patch(vm_prot_matches17, vm_prot_masks17, sizeof(vm_prot_matches17) / sizeof(uint32_t), (void *) patch_vm_prot17);
+
     // r2: /x e003302a1f041f720100005400000035:f0fff0ff1ffeffff1f0000ff100000ff
     uint32_t vm_prot_matches_new_alt[] = {
         0x2a3003e0, // mvn w{0-15}, w{16-31}
@@ -1300,6 +1321,7 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
         vm_prot_new,
         vm_prot_new_alt,
         vm_prot_inline,
+        vm_prot17,
         vmf_enter,
         vmf_enter_alt,
         vmf_enter14,
