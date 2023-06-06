@@ -162,17 +162,14 @@ bool patch_vm_map_protect(uint32_t *stream) {
 }
 
 bool patch_vm_prot_branch(struct pf_patch_t *patch, uint32_t *stream) {
-    int32_t off = pf_signextend_32(stream[2] >> 5, 19);
-    stream[2] = 0x14000000 | (uint32_t) off;
+    uint32_t *bne = pf_find_next(stream, 3, 0x54000001, 0xff00001f);
+    if (!bne) {
+        return false;
+    }
+    int32_t off = pf_signextend_32(*bne >> 5, 19);
+    *bne = 0x14000000 | (uint32_t) off;
 
-    return patch_vm_map_protect(stream + 2 + off); // uint32 takes care of << 2
-}
-
-bool patch_vm_prot17(struct pf_patch_t *patch, uint32_t *stream) {
-    int32_t off = pf_signextend_32(stream[1] >> 5, 19);
-    stream[1] = 0x14000000 | (uint32_t) off;
-
-    return patch_vm_map_protect(stream + 1 + off); // uint32 takes care of << 2
+    return patch_vm_map_protect(bne + off); // uint32 takes care of << 2
 }
 
 bool patch_vm_prot_inline(struct pf_patch_t *patch, uint32_t *stream) {
@@ -869,12 +866,12 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
         0x37a80000  // tbnz w{0-15}, {0x15 | 0x17}, 0x...
     };
     uint32_t vm_prot_masks17[] = {
-        0xfff00e1f,
+        0xfff00e1f, // bics wzr, w{0-15}, w{16-31}
         0x54000001, // b.ne 0x...
         0x37a80000  // tbnz w{0-15}, {0x15 | 0x17}, 0x...
     };
 
-    struct pf_patch_t vm_prot17 = pf_construct_patch(vm_prot_matches17, vm_prot_masks17, sizeof(vm_prot_matches17) / sizeof(uint32_t), (void *) patch_vm_prot17);
+    struct pf_patch_t vm_prot17 = pf_construct_patch(vm_prot_matches17, vm_prot_masks17, sizeof(vm_prot_matches17) / sizeof(uint32_t), (void *) patch_vm_prot_branch);
 
     // r2: /x e003302a1f041f720100005400000035:f0fff0ff1ffeffff1f0000ff100000ff
     uint32_t vm_prot_matches_new_alt[] = {
