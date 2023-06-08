@@ -1163,9 +1163,9 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
         ret0,
         vnode_oc,
         shc,
-        nvram140,
-        nvram142,
-        nvram164
+        //nvram140,
+        //nvram142,
+        //nvram164
     };
 
     struct pf_patchset_t patchset = pf_construct_patchset(patches, sizeof(patches) / sizeof(struct pf_patch_t), (void *) pf_find_maskmatch32);

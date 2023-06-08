@@ -418,11 +418,11 @@ void patch_amfi_kext(void *real_buf, void *amfi_buf, size_t amfi_len, bool has_c
     struct pf_patch_t trustcache_new = pf_construct_patch(trustcache_matches_new, trustcache_masks_new, sizeof(trustcache_matches_new) / sizeof(uint32_t), (void *) patch_trustcache_new);
 
     struct pf_patch_t patches[] = {
-        execve_tail_patch,
+        //execve_tail_patch,
         sha1_patch,
-        mac_syscall_patch,
-        mac_syscall_patch_alt,
-        mac_syscall_patch_low,
+        //mac_syscall_patch,
+        //mac_syscall_patch_alt,
+        //mac_syscall_patch_low,
         launch_constraints,
         developer_mode,
         trustcache_old,

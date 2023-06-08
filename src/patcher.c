@@ -143,7 +143,7 @@ fffffff006f33e30  9c 1f 67 06 f0 ff ff ff 00 00 00 00 00 00 00 00  ..g..........
 
     patch(text_exec_patches, text->addr, text->size, text->addr, rootvp_string_match != NULL, cryptex_string_match != NULL, kmap_port_string_match != NULL);
 
-    if (!found_amfi_mac_syscall) {
+    /*if (!found_amfi_mac_syscall) {
         printf("%s: no amfi_mac_syscall\n", __FUNCTION__);
         return;
     } else if (!repatch_ldr_x19_vnode_pathoff) {
@@ -270,7 +270,7 @@ fffffff006f33e30  9c 1f 67 06 f0 ff ff ff 00 00 00 00 00 00 00 00  ..g..........
         }
 
         *nvram_patchpoint = 0x14000000 | (((uint64_t)nvram_off >> 2) & 0x3ffffff);
-    }
+    }*/
 
     if (!rootvp_string_match) {
         const char *snapshot = "com.apple.os.update-";
