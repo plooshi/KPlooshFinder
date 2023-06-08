@@ -76,8 +76,6 @@ void patch_kernel() {
         return;
     }
     
-    patch(patch_apfs_kext, apfs_text->addr, apfs_text->size, rootvp_string_match == NULL);
-
     struct mach_header_64 *amfi_kext = macho_find_kext(kernel_buf, "com.apple.driver.AppleMobileFileIntegrity");
     if (!amfi_kext) {
         printf("Unable to find AMFI kext!\n");
@@ -113,10 +111,6 @@ void patch_kernel() {
     }
 
     patch(patch_sandbox_kext, sandbox_text->addr, sandbox_text->size);
-
-    macho_run_each_kext(kernel_buf, (void *) patch_all_kexts);
-
-    patch(patch_mach_traps, data_const->addr, data_const->size);
 
     // sbops useful shit
     /*
@@ -161,9 +155,6 @@ fffffff006f33e30  9c 1f 67 06 f0 ff ff ff 00 00 00 00 00 00 00 00  ..g..........
     if (!found_amfi_mac_syscall) {
         printf("%s: no amfi_mac_syscall\n", __FUNCTION__);
         return;
-    } else if (!found_mac_unmount) {
-        printf("%s: no dounmount\n", __FUNCTION__);
-        return;
     } else if (!repatch_ldr_x19_vnode_pathoff) {
         printf("%s: no repatch_ldr_x19_vnode_pathoff\n", __FUNCTION__);
         return;
@@ -182,20 +173,8 @@ fffffff006f33e30  9c 1f 67 06 f0 ff ff ff 00 00 00 00 00 00 00 00  ..g..........
     } else if (offsetof_p_flags == -1) {
         printf("%s: no p_flags?\n", __FUNCTION__);
         return;
-    } else if (!found_vm_fault_enter) {
-        printf("%s: no vm_fault_enter\n", __FUNCTION__);
-        return;
-    } else if (!found_vm_map_protect) {
-        printf("%s: no vm_map_protect\n", __FUNCTION__);
-        return;
     } else if (!vfs_context_current) {
         printf("%s: no vfs_context_current\n", __FUNCTION__);
-        return;
-    } else if (!rootvp_string_match && !found_mac_mount) {
-        printf("%s: no mac_mount\n", __FUNCTION__);
-        return;
-    } else if (!dyld_hook_patchpoint) {
-        printf("%s: no dyld hook?\n", __FUNCTION__);
         return;
     }
 
@@ -284,93 +263,6 @@ fffffff006f33e30  9c 1f 67 06 f0 ff ff ff 00 00 00 00 00 00 00 00  ..g..........
 
     uint32_t *repatch_vnode_shellcode = &shellcode_area[5];
     *repatch_vnode_shellcode = repatch_ldr_x19_vnode_pathoff;
-    if (rootvp_string_match) {
-        uint32_t *shellcode_block = shellcode_to;
-        uint64_t shellcode_addr = macho_ptr_to_va(kernel_buf, shellcode_block);
-        uint64_t patchpoint_addr = macho_ptr_to_va(kernel_buf, fsctl_patchpoint);
-        uint64_t orig_func = patchpoint_addr + 4;
-
-        size_t slow_idx  = _fsctl_shc_stolen_slowpath - _fsctl_shc;
-        size_t fast_idx  = _fsctl_shc_stolen_fastpath - _fsctl_shc;
-        size_t open_idx  = _fsctl_shc_vnode_open      - _fsctl_shc;
-        size_t close_idx = _fsctl_shc_vnode_close     - _fsctl_shc;
-        size_t bl_idx    = _fsctl_shc_orig_bl         - _fsctl_shc;
-        size_t b_idx     = _fsctl_shc_orig_b          - _fsctl_shc;
-
-        int64_t open_off  = vnode_open_addr  - (shellcode_addr + (open_idx  << 2));
-        int64_t close_off = vnode_close_addr - (shellcode_addr + (close_idx << 2));
-        int64_t bl_off    = orig_func - (shellcode_addr + (bl_idx << 2));
-        int64_t b_off     = orig_func - (shellcode_addr + (b_idx  << 2));
-        int64_t patch_off = shellcode_addr - patchpoint_addr;
-        if (
-            open_off  > 0x7fffffcLL || open_off  < -0x8000000LL ||
-            close_off > 0x7fffffcLL || close_off < -0x8000000LL ||
-            bl_off    > 0x7fffffcLL || bl_off    < -0x8000000LL ||
-            b_off     > 0x7fffffcLL || b_off     < -0x8000000LL ||
-            patch_off > 0x7fffffcLL || patch_off < -0x8000000LL
-        ) {
-            printf("fsctl_shc jump too far: 0x%lx/0x%lx/0x%lx/0x%lx/0x%lx\n", open_off, close_off, bl_off, b_off, patch_off);
-            return;
-        }
-
-        shellcode_from = _fsctl_shc;
-        shellcode_end = _fsctl_shc_end;
-        while(shellcode_from < shellcode_end)
-        {
-            *shellcode_to++ = *shellcode_from++;
-        }
-
-        uint32_t stolen = *fsctl_patchpoint;
-        shellcode_block[slow_idx]   = stolen;
-        shellcode_block[fast_idx]   = stolen;
-        shellcode_block[open_idx]  |= (open_off  >> 2) & 0x03ffffff;
-        shellcode_block[close_idx] |= (close_off >> 2) & 0x03ffffff;
-        shellcode_block[bl_idx]    |= (bl_off    >> 2) & 0x03ffffff;
-        shellcode_block[b_idx]     |= (b_off     >> 2) & 0x03ffffff;
-
-        *fsctl_patchpoint = 0x14000000 | ((patch_off >> 2) & 0x03ffffff);
-    }
-
-    uint64_t patchpoint_addr = macho_ptr_to_va(kernel_buf, dyld_hook_patchpoint);
-    uint64_t dyld_block = macho_ptr_to_va(kernel_buf, shellcode_to);
-
-    size_t ctx_idx    = _dyld_shc_ctx    - _dyld_shc;
-    size_t lookup_idx = _dyld_shc_lookup - _dyld_shc;
-    size_t put_idx    = _dyld_shc_put    - _dyld_shc;
-
-    int64_t ctx_off    = vfs_context_current_p - (dyld_block + (ctx_idx    << 2));
-    int64_t lookup_off = vnode_lookup_p        - (dyld_block + (lookup_idx << 2));
-    int64_t put_off    = vnode_put_p           - (dyld_block + (put_idx    << 2));
-    int64_t patch_off  = dyld_block - patchpoint_addr;
-    if(ctx_off > 0x7fffffcLL || ctx_off < -0x8000000LL || lookup_off > 0x7fffffcLL || lookup_off < -0x8000000LL || put_off > 0x7fffffcLL || put_off < -0x8000000LL || patch_off > 0x7fffffcLL || patch_off < -0x8000000LL) {
-        printf("dyld_shc: jump too far: 0x%lx/0x%lx/0x%lx/0x%lx\n", ctx_off, lookup_off, put_off, patch_off);
-        return;
-    }
-
-    memcpy(shellcode_to, _dyld_shc, (uint64_t) _dyld_shc_end - (uint64_t) _dyld_shc);
-
-    shellcode_to[ctx_idx]    |= (ctx_off    >> 2) & 0x03ffffff;
-    shellcode_to[lookup_idx] |= (lookup_off >> 2) & 0x03ffffff;
-    shellcode_to[put_idx]    |= (put_off    >> 2) & 0x03ffffff;
-    *dyld_hook_patchpoint    |= (patch_off  >> 2) & 0x03ffffff;
-
-    if (nvram_patchpoint) {
-        uint64_t nvram_patch_from = macho_ptr_to_va(kernel_buf, nvram_patchpoint);
-        uint64_t nvram_patch_to = macho_ptr_to_va(kernel_buf, shellcode_to);
-        int64_t nvram_off = nvram_patch_to - nvram_patch_from;
-        if(nvram_off > 0x7fffffcLL || nvram_off < -0x8000000LL) {
-            printf("nvram_shc: jump too far: 0x%lx\n", nvram_off);
-            return;
-        }
-
-        shellcode_from = _nvram_shc;
-        shellcode_end = _nvram_shc_end;
-        while(shellcode_from < shellcode_end) {
-            *shellcode_to++ = *shellcode_from++;
-        }
-
-        *nvram_patchpoint = 0x14000000 | (((uint64_t)nvram_off >> 2) & 0x3ffffff);
-    }
 
     if (!rootvp_string_match) {
         const char *snapshot = "com.apple.os.update-";

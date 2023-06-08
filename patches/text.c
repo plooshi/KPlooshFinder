@@ -1311,38 +1311,12 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
 
 
     struct pf_patch_t patches[] = {
-        mac_mount_patch,
-        mac_mount_patch_alt,
-        mac_unmount,
-        vm_prot_old,
-        vm_prot_new,
-        vm_prot_new_alt,
-        vm_prot_inline,
-        vm_prot17,
-        vmf_enter,
-        vmf_enter_alt,
-        vmf_enter14,
-        vmf_enter14_alt,
         vnode_getaddr,
         vnode_getpath,
         vnode_getpath_alt,
         ret0,
-        fsctl,
         vnode_oc,
-        rootvp,
-        srrr,
-        shc,
-        dyld,
-        nvram,
-        nvram140,
-        nvram142,
-        nvram164,
-        tce,
-        tce_bl,
-        tce_imm,
-        kmap,
-        kmap_alt,
-        kmap155
+        shc
     };
 
     struct pf_patchset_t patchset = pf_construct_patchset(patches, sizeof(patches) / sizeof(struct pf_patch_t), (void *) pf_find_maskmatch32);
