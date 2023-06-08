@@ -1063,12 +1063,8 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
 
     struct pf_patch_t srrr = pf_construct_patch(srrr_matches, srrr_masks, sizeof(srrr_matches) / sizeof(uint32_t), (void *) patch_shared_region_root_dir);
 
-    uint32_t count = (_dyld_shc_end - _dyld_shc);
-    // get rid of this
-    {
-        count += (_sandbox_shellcode_end - _sandbox_shellcode);
-        //+ (kdi_shc_end - kdi_shc) + (fsctl_shc_end - fsctl_shc);
-    }
+    uint32_t count = _sandbox_shellcode_end - _sandbox_shellcode;
+    count += (void *) _nvram_shc_end - (void *) _nvram_shc;
     uint32_t shc_matches[count];
     uint32_t shc_masks[count];
     for(size_t i = 0; i < count; ++i)
@@ -1077,28 +1073,6 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
         shc_masks[i] = 0xffffffff;
     }
     struct pf_patch_t shc = pf_construct_patch(shc_matches, shc_masks, sizeof(shc_matches) / sizeof(uint32_t), (void *) patch_shellcode_area);
-
-    uint32_t dyld_matches[] = {
-        0xaa1003e0, // mov x0, x{16-31}
-        0xaa1003e1, // mov x1, x{16-31}
-        0x94000000, // bl sym._strnlen
-        0xeb10001f, // cmp x0, x{16-31}
-        0x54000002, // b.hs 0x...
-        0x90000000, // adrp xN, "/usr/lib/dyld"@PAGE
-        0x91000000  // add xN, xN, "/usr/lib/dyld"@PAGEOFF
-    };
-    uint32_t dyld_masks[] =
-    {
-        0xfff0ffff,
-        0xfff0ffff,
-        0xfc000000,
-        0xfff0ffff,
-        0xff00001f,
-        0x9f000000,
-        0xffc00000
-    };
-
-    struct pf_patch_t dyld = pf_construct_patch(dyld_matches, dyld_masks, sizeof(dyld_matches) / sizeof(uint32_t), (void *) patch_dyld);
 
     uint32_t nvram_matches[] = {
         0xf8418c00, // ldr x*, [x*, 0x18]!
@@ -1182,141 +1156,16 @@ void text_exec_patches(void *real_buf, void *text_buf, size_t text_len, uint64_t
 
     struct pf_patch_t nvram164 = pf_construct_patch(nvram164_matches, nvram164_masks, sizeof(nvram164_matches) / sizeof(uint32_t), (void *) patch_nvram_table);
 
-    // r2: /x 000040b900005036000040b900005036:0000c0ff0000f8ff0000c0ff0000f8fe
-    uint32_t tce_matches[] = {
-        0xb9400000, // ldr x*, [x*]
-        0x36500000, // tbz w*, 0xa, *
-        0xb9400000, // ldr x*, [x*]
-        0x36500000  // tbz w*, 0xa, *
-    };
-    uint32_t tce_masks[] = {
-        0xffc00000,
-        0xfff80000,
-        0xffc00000,
-        0xfef80000  // match both tbz or tbnz
-    };
-
-    struct pf_patch_t tce = pf_construct_patch(tce_matches, tce_masks, sizeof(tce_matches) / sizeof(uint32_t), (void *) patch_task_conversion_eval_ldr);
-
-    uint32_t tce_matches_bl[] = {
-        0xaa0003e0, // mov x0, xN
-        0x94000000, // bl 0x{same}
-        0x34000000, // cbz w0, 0x...
-        0xaa1003e0, // mov x0, x{16-31}
-        0x94000000, // bl 0x{same}
-        0x34000000  // cb(n)z w0, 0x...
-    };
-    uint32_t tce_masks_bl[] = {
-        0xffe0ffff,
-        0xfc000000,
-        0xff00001f,
-        0xfff0ffff,
-        0xfc000000,
-        0xfe00001f
-    };
-
-    struct pf_patch_t tce_bl = pf_construct_patch(tce_matches_bl, tce_masks_bl, sizeof(tce_matches_bl) / sizeof(uint32_t), (void *) patch_task_conversion_eval_bl);
-
-    uint32_t tce_matches_imm[] = {
-        0x12002400, // and w*, w*, 0x3ff
-        0x7100141f, // cmp w*, 5
-        0x54000001, // b.ne 0x...
-        0xf9400400, // ldr x*, [x*, 0x...]
-        0xeb00001f, // cmp x*, x*
-        0x54000001, // b.ne 0x...
-        0x39400400, // ldrb w*, [x*, 0x... & 0x1]
-        0x36100000  // tbz w*, 2, 0x...
-    };
-    uint32_t tce_masks_imm[] = {
-        0xfffffc00,
-        0xfffffc1f,
-        0xff00001f,
-        0xfffffc00,
-        0xffe0fc1f,
-        0xff00001f,
-        0xffc00400,
-        0xfef80000
-    };
-
-    struct pf_patch_t tce_imm = pf_construct_patch(tce_matches_imm, tce_masks_imm, sizeof(tce_matches_imm) / sizeof(uint32_t), (void *) patch_task_conversion_eval_imm);
-
-    uint32_t kmap_matches[] = {
-        0x39400000, // ldr(b) wN, [xM, ...]
-        0x34000000, // cbz
-        0xf9400000, // ldr xN, [xM, {0x0-0x78}]
-        0xf9402000, // ldr xN, [xM, {0x40|0x48}]
-        0x90000000, // adrp
-        0xf9400000, // ldr xN, [xM, ...]
-        0xeb00001f, // cmp
-        0x54000000  // b.ne / b.eq
-    };
-    uint32_t kmap_masks[] = {
-        0x7fc00000,
-        0xff000000,
-        0xffffc000,
-        0xfffff800,
-        0x9f000000,
-        0xffc00000,
-        0xffe0fc1f,
-        0xff00001e
-    };
-
-    struct pf_patch_t kmap = pf_construct_patch(kmap_matches, kmap_masks, sizeof(kmap_matches) / sizeof(uint32_t), (void *) patch_convert_port_to_map);
-
-    uint32_t kmap_matches_alt[] = {
-        0x39400000, // ldr(b) wN, [xM, ...]
-        0x34000000, // cbz
-        0xf9400000, // ldr xN, [xM, {0x0-0x78}]
-        0xf9402000, // ldr xN, [xM, {0x40|0x48}]
-        nop,
-        0x58000000, // ldr
-        0xeb00001f, // cmp
-        0x54000000  // b.ne / b.eq
-    };
-    uint32_t kmap_masks_alt[] = {
-        0x7fc00000,
-        0xff000000,
-        0xffffc000,
-        0xfffff800,
-        0xffffffff,
-        0xff000000,
-        0xffe0fc1f,
-        0xff00001e
-    };
-
-    struct pf_patch_t kmap_alt = pf_construct_patch(kmap_matches_alt, kmap_masks_alt, sizeof(kmap_matches_alt) / sizeof(uint32_t), (void *) patch_convert_port_to_map);
-
-    uint32_t kmap_matches155[] = {
-        0x39400000, // ldrb wN, [xM, ...]
-        0x34000000, // cbz
-        0xf9400000, // ldr xN, [xM, {0x0-0x78}]
-        0xf9402000, // ldr xN, [xM, {0x40|0x48}]
-        0x90000000, // adrp
-        0x91000000, // add
-        0xeb00001f, // cmp
-        0x54000000  // b.ne / b.eq
-    };
-    uint32_t kmap_masks155[] = {
-        0xffc00000,
-        0xff000000,
-        0xffffc000,
-        0xfffff800,
-        0x9f000000,
-        0xffc00000,
-        0xffe0fc1f,
-        0xff00001e
-    };
-
-    struct pf_patch_t kmap155 = pf_construct_patch(kmap_matches155, kmap_masks155, sizeof(kmap_matches155) / sizeof(uint32_t), (void *) patch_convert_port_to_map);
-
-
     struct pf_patch_t patches[] = {
         vnode_getaddr,
         vnode_getpath,
         vnode_getpath_alt,
         ret0,
         vnode_oc,
-        shc
+        shc,
+        nvram140,
+        nvram142,
+        nvram164
     };
 
     struct pf_patchset_t patchset = pf_construct_patchset(patches, sizeof(patches) / sizeof(struct pf_patch_t), (void *) pf_find_maskmatch32);

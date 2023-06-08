@@ -9,11 +9,8 @@
 
 #include "formats/macho.h"
 #include "plooshfinder.h"
-#include "patches/apfs.h"
 #include "patches/amfi.h"
 #include "patches/sandbox.h"
-#include "patches/kext.h"
-#include "patches/traps.h"
 #include "patches/sbops.h"
 #include "patches/shellcode.h"
 #include "patches/text.h"
@@ -70,12 +67,6 @@ void patch_kernel() {
         return;
     }
 
-    struct section_64 *apfs_text = macho_find_section(apfs_kext, "__TEXT_EXEC", "__text");
-    if (!apfs_text) {
-        printf("Unable to find APFS text!\n");
-        return;
-    }
-    
     struct mach_header_64 *amfi_kext = macho_find_kext(kernel_buf, "com.apple.driver.AppleMobileFileIntegrity");
     if (!amfi_kext) {
         printf("Unable to find AMFI kext!\n");
@@ -263,6 +254,23 @@ fffffff006f33e30  9c 1f 67 06 f0 ff ff ff 00 00 00 00 00 00 00 00  ..g..........
 
     uint32_t *repatch_vnode_shellcode = &shellcode_area[5];
     *repatch_vnode_shellcode = repatch_ldr_x19_vnode_pathoff;
+    if (nvram_patchpoint) {
+        uint64_t nvram_patch_from = macho_ptr_to_va(kernel_buf, nvram_patchpoint);
+        uint64_t nvram_patch_to = macho_ptr_to_va(kernel_buf, shellcode_to);
+        int64_t nvram_off = nvram_patch_to - nvram_patch_from;
+        if(nvram_off > 0x7fffffcLL || nvram_off < -0x8000000LL) {
+            printf("nvram_shc: jump too far\n");
+            return;
+        }
+
+        shellcode_from = _nvram_shc;
+        shellcode_end = _nvram_shc_end;
+        while(shellcode_from < shellcode_end) {
+            *shellcode_to++ = *shellcode_from++;
+        }
+
+        *nvram_patchpoint = 0x14000000 | (((uint64_t)nvram_off >> 2) & 0x3ffffff);
+    }
 
     if (!rootvp_string_match) {
         const char *snapshot = "com.apple.os.update-";
