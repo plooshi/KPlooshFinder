@@ -336,7 +336,7 @@ bool patch_vnode_open_close(struct pf_patch_t *patch, uint32_t *stream) {
         return false;
     }
 
-    uint32_t *vnode_close = pf_find_next(vnode_open + 1, 0x20, 0xaa1003e2, 0xfff0ffff); // mov x2, x{x16-31}
+    uint32_t *vnode_close = pf_find_next(vnode_open + 1, 0x30, 0xaa1003e2, 0xfff0ffff); // mov x2, x{x16-31}
     if(
         !vnode_close ||
         !pf_maskmatch32(vnode_close[1], 0x94000000, 0xfc000000)  || // bl
