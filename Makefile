@@ -14,14 +14,13 @@ LIBS = -lplooshfinder
 
 .PHONY: $(PLOOSHFINDER) all
 
-all: dirs $(PLOOSHFINDER) $(OBJS) KPlooshFinder
+all: submodules dirs $(PLOOSHFINDER) $(OBJS) KPlooshFinder
 
 submodules:
 	@git submodule update --init --remote --recursive || true
 
 dirs:
 	@mkdir -p $(OBJDIR)
-	@mkdir -p $(OBJDIR)/patches
 	@mkdir -p $(OBJDIR)/patches
 
 clean:
