@@ -19,6 +19,58 @@
 #include "patches/text.h"
 #include "mac.h"
 
+#ifdef _WIN32
+/* Native memmem implementation for libc, without any extra posix emulation layer (like Cygwin/Msys2).
+   Credits of this implementation goes to mdk @2017
+   Since this function are not stable (as original author has already confirmed) any fixes/improvments are really welcome.
+   For more info please refer to the original link: https://codereview.stackexchange.com/q/182156
+*/
+void *memmem(const void *haystack_start, size_t haystack_len, const void *needle_start, size_t needle_len)
+{
+
+    const unsigned char *haystack = (const unsigned char *) haystack_start;
+    const unsigned char *needle = (const unsigned char *) needle_start;
+    const unsigned char *h = NULL;
+    const unsigned char *n = NULL;
+    size_t x = needle_len;
+
+    /* The first occurrence of the empty string is deemed to occur at
+    the beginning of the string.  */
+    if (needle_len == 0)
+        return (void *) haystack_start;
+
+    /* Sanity check, otherwise the loop might search through the whole
+        memory.  */
+     if (haystack_len < needle_len)
+       return NULL;
+
+    for (; *haystack && haystack_len--; haystack++) {
+
+        x = needle_len;
+        n = needle;
+        h = haystack;
+
+        if (haystack_len < needle_len)
+            break;
+
+        if ((*haystack != *needle) || ( *haystack + needle_len != *needle + needle_len))
+            continue;
+
+        for (; x ; h++ , n++) {
+            x--;
+
+            if (*h != *n) 
+                break;
+
+           if (x == 0)
+            return (void *)haystack;
+        }
+    }
+
+    return NULL;
+}
+#endif
+
 void *kernel_buf;
 size_t kernel_len;
 int platform = 0;
